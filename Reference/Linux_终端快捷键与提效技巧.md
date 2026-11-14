@@ -73,7 +73,7 @@ cd <Alt+.>
 sudo echo "10.0.0.5 db" >> /etc/hosts
 ```
 
-![image-20261111113009969](image-20261111113009969.png)
+![image-20261111113009969](Linux_终端快捷键与提效技巧/image-20261111113009969.png)
 
 原因：重定向由当前 shell（无 root 权限）执行，`sudo` 只提权了 `echo`。改用 `tee` 提权写入：
 
@@ -81,7 +81,7 @@ sudo echo "10.0.0.5 db" >> /etc/hosts
 echo "10.0.0.5 db" | sudo tee -a /etc/hosts
 ```
 
-![image-20261111112943090](image-20261111112943090.png)
+![image-20261111112943090](Linux_终端快捷键与提效技巧/image-20261111112943090.png)
 
 注意事项：
 

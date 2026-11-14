@@ -320,4 +320,4 @@ docker-compose up -d
 - APT 独立代理：解决软件包下载
 - Docker Daemon 代理：解决 Docker 镜像拉取
 
-整个方案比较简单，适合自己日常在 Kali 中搭建 Vulhub 等 Docker 靶场时使用![image-20261103183339601](docker%E5%AE%89%E8%A3%85/image-20261103183339601.png)
+整个方案比较简单，适合自己日常在 Kali 中搭建 Vulhub 等 Docker 靶场时使用![image-20261103183339601](Docker_Kali安装与配置/image-20261103183339601.png)

