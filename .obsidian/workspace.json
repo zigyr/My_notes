@@ -1,0 +1,235 @@
+{
+  "main": {
+    "id": "498c8de745bd3aae",
+    "type": "split",
+    "children": [
+      {
+        "id": "783acbdf77886bff",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "7837aacdd9e85881",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "README.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "README"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "0193b05d35db7145",
+    "type": "split",
+    "children": [
+      {
+        "id": "8ac964a2055cd05a",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "eff12f0f4ec72e04",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-folder-closed",
+              "title": "文件列表"
+            }
+          },
+          {
+            "id": "520b5ba486cf9852",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "搜索"
+            }
+          },
+          {
+            "id": "663fcd42bf6c9cc0",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-bookmark",
+              "title": "书签"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "e2df521644c74ea3",
+    "type": "split",
+    "children": [
+      {
+        "id": "5fcf6bef11f2dabc",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "1d4e887a688052c6",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "README.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "反向链接"
+            }
+          },
+          {
+            "id": "818790cf601eb8ed",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Inbox/一次www.zip源码的分析/一次www.zip源码的分析.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "出链"
+            }
+          },
+          {
+            "id": "4a4c2dd947a6fc7e",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "标签"
+            }
+          },
+          {
+            "id": "ec342db446160052",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "添加笔记属性"
+            }
+          },
+          {
+            "id": "9ef63bf8b3f8c2d8",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "README.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "大纲"
+            }
+          }
+        ],
+        "currentTab": 4
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:打开快速切换": false,
+      "graph:查看关系图谱": false,
+      "canvas:新建白板": false,
+      "daily-notes:打开/创建今天的日记": false,
+      "templates:插入模板": false,
+      "command-palette:打开命令面板": false,
+      "bases:新建数据库": false
+    }
+  },
+  "active": "eff12f0f4ec72e04",
+  "lastOpenFiles": [
+    "00_Inbox/Linux常用快捷键.md",
+    "00_Inbox/一次www.zip源码的分析/一次www.zip源码的分析.md",
+    "Inbox/一次www.zip源码的分析/一次www.zip源码的分析-0.md",
+    "00_Inbox/一次www.zip源码的分析/目录结构.md",
+    "README.md",
+    "00_Inbox/nmap.md",
+    "00_Inbox/linux compress.md",
+    "00_Inbox/代码审计/[GFCTF 2021]Baby_Web.md",
+    "00_Inbox/代码审计/[NCTF 2018]Easy_Audit.md",
+    "CTF/专项/代码审计/Untitled.md",
+    "Untitled.md",
+    "00_Inbox/Zumpyx-OSCP靶场/0x0F - PwnLab.md",
+    "00_Inbox/Zumpyx-OSCP靶场/0x0E - Mr-Robot1.md",
+    "00_Inbox/代码审计/[GFCTF 2021]Baby_Web/image-20261109180108262.png",
+    "00_Inbox/代码审计/[GFCTF 2021]Baby_Web/image-20261109140007818.png",
+    "00_Inbox/代码审计/[GFCTF 2021]Baby_Web/image-20261109141024023.png",
+    "00_Inbox/代码审计/[GFCTF 2021]Baby_Web/image-20261109134729161.png",
+    "00_Inbox/代码审计/[GFCTF 2021]Baby_Web/image-20261109094520901.png",
+    "00_Inbox/代码审计/[GFCTF 2021]Baby_Web/1794185611811.png",
+    "00_Inbox/代码审计/[GFCTF 2021]Baby_Web",
+    "00_Inbox/代码审计",
+    "CTF/专项/文件上传/[GFCTF 2021]Baby_Web/image-20261109141024023.png",
+    "CTF/专项/文件上传/[GFCTF 2021]Baby_Web/image-20261109140007818.png",
+    "CTF/专项/文件上传/[GFCTF 2021]Baby_Web/image-20261109134729161.png",
+    "CTF/专项/文件上传/[GFCTF 2021]Baby_Web/image-20261109094520901.png",
+    "CTF/专项/文件上传/[GFCTF 2021]Baby_Web",
+    "CTF/专项/文件上传/[GFCTF 2021]Baby_Web.md",
+    "CTF/专项/文件上传/Untitled.md",
+    "CTF/专项/文件上传",
+    "CTF/专项",
+    "Untitled",
+    "0x0E.md",
+    "Lession/Jaden/笔记润色 Skill.md",
+    "Lession/Jaden/笔记润色 Skill.en.md",
+    "00_Inbox/Jaden/中间件和框架介绍.md",
+    "00_Inbox/Jaden/中间件和框架介绍",
+    "Lession/Jaden/docker.md",
+    "Lession/Jaden/docker",
+    "00_Inbox/Jaden",
+    "zigyrSec/欢迎.md",
+    "Inbox/一次www.zip源码的分析/src"
+  ]
+}
