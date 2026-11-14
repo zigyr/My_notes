@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "README.md",
+                "file": "AGENTS.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "README"
+              "title": "AGENTS"
             }
           }
         ]
@@ -161,7 +161,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "README.md",
+                "file": "AGENTS.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -188,13 +188,17 @@
       "bases:新建数据库": false
     }
   },
-  "active": "eff12f0f4ec72e04",
+  "active": "7837aacdd9e85881",
   "lastOpenFiles": [
+    "gitignore",
+    "新建文本文档.txt",
+    "README.md",
+    "AGENTS.md",
+    "新建文件夹",
     "00_Inbox/Linux常用快捷键.md",
     "00_Inbox/一次www.zip源码的分析/一次www.zip源码的分析.md",
     "Inbox/一次www.zip源码的分析/一次www.zip源码的分析-0.md",
     "00_Inbox/一次www.zip源码的分析/目录结构.md",
-    "README.md",
     "00_Inbox/nmap.md",
     "00_Inbox/linux compress.md",
     "00_Inbox/代码审计/[GFCTF 2021]Baby_Web.md",
@@ -228,8 +232,6 @@
     "00_Inbox/Jaden/中间件和框架介绍",
     "Lession/Jaden/docker.md",
     "Lession/Jaden/docker",
-    "00_Inbox/Jaden",
-    "zigyrSec/欢迎.md",
-    "Inbox/一次www.zip源码的分析/src"
+    "zigyrSec/欢迎.md"
   ]
 }
