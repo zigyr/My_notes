@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "AGENTS.md",
+                "file": "Reports/Weekly/2026-W46_本周首次周报.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "AGENTS"
+              "title": "2026-W46_本周首次周报"
             }
           }
         ]
@@ -161,7 +161,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "AGENTS.md",
+                "file": "Reports/Weekly/2026-W46_本周首次周报.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -190,7 +190,20 @@
   },
   "active": "7837aacdd9e85881",
   "lastOpenFiles": [
+    "AGENTS.md",
     "Reports/Weekly/2026-11-14_至_2026-11-14_阶段回顾.md",
+    "Reports/Weekly/2026-W46_本周首次周报.md",
+    "README.md",
+    "Reference/Docker_基础操作速查.md",
+    "Reference/BurpSuite_Intruder四种攻击模式.md",
+    "Lession/Zumpyx/OSCP靶场/0x12 - Pinkys Palace v2.md",
+    "Pasted image 20261114120736.png",
+    "Lession/Zumpyx/OSCP靶场/0x10 - Lin.Security.md",
+    "Lession/Zumpyx/OSCP靶场/0x0F - PwnLab.md",
+    "CTF/代码审计/NCTF2018_Easy_Audit.md",
+    "CTF/代码审计/GFCTF2021_Baby_Web.md",
+    "CTF/代码审计/一次www源码分析/第四届数信杯_supplyink.md",
+    "CTF/代码审计/一次www源码分析/目录结构.md",
     "Reports/Weekly",
     "Reports",
     "Reference/Nmap_常用命令速查.md",
@@ -201,8 +214,6 @@
     "Reference/Linux_Shell文本处理速查.md",
     "Reference/Linux_压缩与解压命令速查.md",
     "Reference/Kali_代理配置速查.md",
-    "Reference/BurpSuite_Intruder四种攻击模式.md",
-    "Reference/Docker_基础操作速查.md",
     "Environment/手机热点代理_Windows与Kali配置/image-20261111165827201.png",
     "Environment/手机热点代理_Windows与Kali配置/image-20261111164610927.png",
     "Environment/手机热点代理_Windows与Kali配置/image-20261111164121023.png",
@@ -214,27 +225,16 @@
     "Environment/Docker_Kali安装与配置",
     "Environment/Docker_Kali安装与配置.md",
     "Lession/Zumpyx/OSCP靶场/0x12 - Pinkys Palace v2/image-20261112094409485.png",
-    "Lession/Zumpyx/OSCP靶场/0x12 - Pinkys Palace v2/image-20261112094130296.png",
-    "Lession/Zumpyx/OSCP靶场/0x12 - Pinkys Palace v2.md",
     "Lession/Zumpyx/OSCP靶场/0x12 - Pinkys Palace v2",
-    "Lession/Zumpyx/OSCP靶场/0x10 - Lin.Security.md",
-    "Lession/Zumpyx/OSCP靶场/0x0F - PwnLab.md",
     "Lession/Zumpyx/OSCP靶场/0x0F - PwnLab",
     "Lession/Zumpyx/OSCP靶场/0x0E - Mr-Robot1.md",
     "Lession/Zumpyx/OSCP靶场/0x0E - Mr-Robot1",
     "Lession/Zumpyx/OSCP靶场",
     "Lession/Zumpyx",
-    "CTF/代码审计/一次www源码分析/第四届数信杯_supplyink.md",
-    "CTF/代码审计/一次www源码分析/目录结构.md",
-    "CTF/代码审计/NCTF2018_Easy_Audit.md",
-    "CTF/代码审计/GFCTF2021_Baby_Web.md",
-    "README.md",
-    "AGENTS.md",
     "00_Inbox/Linux常用快捷键.md",
     "00_Inbox/一次www.zip源码的分析/一次www.zip源码的分析.md",
     "Inbox/一次www.zip源码的分析/一次www.zip源码的分析-0.md",
     "00_Inbox/一次www.zip源码的分析/目录结构.md",
-    "00_Inbox/nmap.md",
-    "00_Inbox/linux compress.md"
+    "00_Inbox/nmap.md"
   ]
 }
