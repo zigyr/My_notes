@@ -131,13 +131,13 @@ source ~/.bashrc
 
 ```shell
 # 临时使用代理
-apt-get -o Acquire::http::Proxy="http://192.168.72.67:7890" \
-        -o Acquire::https::Proxy="http://192.168.72.67:7890" update
+apt-get -o Acquire::http::Proxy="http://192.168.163.78:7890" \
+        -o Acquire::https::Proxy="http://192.168.163.78:7890" update
 
 # 永久配置
 cat > /etc/apt/apt.conf.d/99proxy <<'EOF'
-Acquire::http::Proxy "http://192.168.72.67:7890";
-Acquire::https::Proxy "http://192.168.72.67:7890";
+Acquire::http::Proxy "http://192.168.163.78:7890";
+Acquire::https::Proxy "http://192.168.163.78:7890";
 EOF
 
 # 检测 APT 代理配置

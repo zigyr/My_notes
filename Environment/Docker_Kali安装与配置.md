@@ -116,8 +116,8 @@ IPv4 地址：192.168.12.1
 在 Kali 中配置代理：
 
 ```
-export http_proxy="http://192.168.12.1:7890"
-export https_proxy="http://192.168.12.1:7890"
+export http_proxy="http://192.168.163.78:7890"
+export https_proxy="http://192.168.163.78:7890"
 ```
 
 验证：
@@ -134,14 +134,14 @@ curl -I https://www.google.com
 
 ```
 cat > /etc/apt/apt.conf.d/99proxy <<'EOF'
-Acquire::http::Proxy "http://192.168.12.1:7890/";
-Acquire::https::Proxy "http://192.168.12.1:7890/";
+Acquire::http::Proxy "http://192.168.163.78:7890/";
+Acquire::https::Proxy "http://192.168.163.78:7890/";
 EOF
 ```
 
 验证：
 
-```
+```shell
 apt-config dump | grep -i proxy
 ```
 
@@ -162,8 +162,8 @@ mkdir -p /etc/systemd/system/docker.service.d
 
 cat > /etc/systemd/system/docker.service.d/proxy.conf <<'EOF'
 [Service]
-Environment="HTTP_PROXY=http://192.168.12.1:7890"
-Environment="HTTPS_PROXY=http://192.168.12.1:7890"
+Environment="HTTP_PROXY=http://192.168.163.78:7890"
+Environment="HTTPS_PROXY=http://192.168.163.78:7890"
 Environment="NO_PROXY=localhost,127.0.0.1,::1"
 EOF
 ```
@@ -171,16 +171,13 @@ EOF
 重新加载 systemd 配置并重启 Docker：
 
 ```
-# 重新加载 systemd 配置
 systemctl daemon-reload
-
-# 重启 Docker
 systemctl restart docker
 ```
 
 验证 Docker 是否加载代理：
 
-```
+```shell
 systemctl show --property=Environment docker
 ```
 
@@ -321,3 +318,17 @@ docker-compose up -d
 - Docker Daemon 代理：解决 Docker 镜像拉取
 
 整个方案比较简单，适合自己日常在 Kali 中搭建 Vulhub 等 Docker 靶场时使用![image-20261103183339601](Docker_Kali安装与配置/image-20261103183339601.png)
+
+## 一些问题
+
+### 1. 出口代理掉了
+
+![image-20261119202145181](Docker_Kali%E5%AE%89%E8%A3%85%E4%B8%8E%E9%85%8D%E7%BD%AE/image-20261119202145181.png)
+
+**what：**最开始报错，`Error response from daemon: Get "https://registry-1.docker.io/v2/": EOF`
+
+于是，参考 **docker 代理配置**，为 kali 配置临时代理、为 apt 单独配置代理、也为 Docker Daemon 配置代理
+
+但是弄好后，还是同样报错
+
+**how：**换了个机场。。。

